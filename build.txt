@@ -1,1 +1,1 @@
-gcc main.c -Iinclude -Llib -lglfw3 -lopengl32 -lgdi32 -o main.exev
+gcc main.c -Iinclude -Llib -lglfw3 -lopengl32 -lgdi32 -o main.exe
