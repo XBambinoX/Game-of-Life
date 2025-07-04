@@ -15,27 +15,41 @@ static bool** CreateField(const unsigned short size) {
     return field;
 }
 
-static void NextStep(bool** current, bool** next, const unsigned short size) {
-    for (unsigned short y = 0; y < size; y++) {
-        for (unsigned short x = 0; x < size; x++) {
-            unsigned short alive_neighbors = 0;
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    if (dx == 0 && dy == 0) continue;
-                    int nx = x + dx;
-                    int ny = y + dy;
-                    if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
-                        if (current[ny][nx] == 1) {
-                            alive_neighbors++;
+static void NextStep(bool** current, bool** next, const unsigned short size ) {
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            if (current[i][j] == 0) {
+                int all_dead = 1;
+                for (int di = -1; di <= 1 && all_dead; di++) {
+                    for (int dj = -1; dj <= 1 && all_dead; dj++) {
+                        if (di == 0 && dj == 0) continue;
+                        int ni = (i + di + size) % size;
+                        int nj = (j + dj + size) % size;
+                        if (current[ni][nj] != 0) {
+                            all_dead = 0;
+                            break;
                         }
                     }
                 }
+                if (all_dead) {
+                    next[i][j] = 0;
+                    continue;
+                }
             }
-            if (current[y][x] == 1) {
-                next[y][x] = (alive_neighbors == 2 || alive_neighbors == 3) ? 1 : 0;
+            int neighbors = 0;
+            for (int di = -1; di <= 1; di++) {
+                for (int dj = -1; dj <= 1; dj++) {
+                    if (di == 0 && dj == 0) continue;
+                    int ni = (i + di + size) % size;
+                    int nj = (j + dj + size) % size;
+                    neighbors += current[ni][nj];
+                }
             }
-            else {
-                next[y][x] = (alive_neighbors == 3) ? 1 : 0;
+
+            if (current[i][j]) {
+                next[i][j] = (neighbors == 2 || neighbors == 3) ? 1 : 0;
+            } else {
+                next[i][j] = (neighbors == 3) ? 1 : 0;
             }
         }
     }

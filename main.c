@@ -3,7 +3,7 @@
 
 #define WIDTH 700
 #define HEIGHT 700
-#define FIELD_SIZE 30 
+#define FIELD_SIZE 30
 
 static bool** CreateField(const unsigned short size);
 static void NextStep(bool** current, bool** next, const unsigned short size);
@@ -11,21 +11,6 @@ void FreeField(bool** field, unsigned short size);
 
 void error_callback(int error, const char* description) {
     fprintf(stderr, "Error: %s\n", description);
-}
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    float aspect = (float)WIDTH / HEIGHT;
-    int viewportWidth = width;
-    int viewportHeight = (int)(width / aspect);
-    
-    if (viewportHeight > height) {
-        viewportHeight = height;
-        viewportWidth = (int)(height * aspect);
-    }
-    
-    int x = (width - viewportWidth) / 2;
-    int y = (height - viewportHeight) / 2;
-    glViewport(x, y, viewportWidth, viewportHeight);
 }
 
 static void setWindowIcon(GLFWwindow* window, const char* iconPath) {
@@ -117,16 +102,21 @@ static void key_space(GLFWwindow* window, int key, int scancode, int action, int
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
         shouldWait = !shouldWait;
     }
+    if(key == GLFW_KEY_C && action == GLFW_PRESS){
+        shouldWait = true;
+        for(int i = 0; i < FIELD_SIZE; i++) {
+            for(int j = 0; j < FIELD_SIZE; j++) {
+                field[i][j] = 0;
+            }
+        }
+    }
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
-        
-        int windowWidth, windowHeight;
-        glfwGetWindowSize(window, &windowWidth, &windowHeight);
-        calculateGridDimensions(windowWidth, windowHeight);
+        calculateGridDimensions(WIDTH, HEIGHT);
         
         if(xpos > startX && xpos < WIDTH - startX && ypos > startY && ypos < HEIGHT - startY) {
             unsigned short i = (ypos - startY) / cellSize;
