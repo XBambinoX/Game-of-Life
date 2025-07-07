@@ -3,7 +3,7 @@
 
 #define WIDTH 700
 #define HEIGHT 700
-#define FIELD_SIZE 30
+#define FIELD_SIZE 40
 
 static bool** CreateField(const unsigned short size);
 static void NextStep(bool** current, bool** next, const unsigned short size);
@@ -24,6 +24,7 @@ static void setWindowIcon(GLFWwindow* window, const char* iconPath) {
 
 bool **field = NULL;
 bool **newField = NULL;
+bool **savedField = NULL;
 
 float startX, startY;
 float gridWidth, gridHeight;
@@ -52,7 +53,7 @@ void calculateGridDimensions(int windowWidth, int windowHeight) {
     cellSize = gridWidth / FIELD_SIZE;
 }
 
-void drawGrid() {    
+void drawGrid() {
     glColor3f(0.7f, 0.7f, 0.7f);
     glLineWidth(1.0f);
     
@@ -98,11 +99,11 @@ double lastStepTime = 0.0;
 float stepDelay = 0.05;
 bool shouldWait = true;
 
-static void key_space(GLFWwindow* window, int key, int scancode, int action, int mods) {
+static void key_pressed(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
         shouldWait = !shouldWait;
     }
-    if(key == GLFW_KEY_C && action == GLFW_PRESS){
+    if(key == GLFW_KEY_C && action == GLFW_PRESS){ // For clearing the field
         shouldWait = true;
         for(int i = 0; i < FIELD_SIZE; i++) {
             for(int j = 0; j < FIELD_SIZE; j++) {
@@ -110,7 +111,34 @@ static void key_space(GLFWwindow* window, int key, int scancode, int action, int
             }
         }
     }
+    if(key == GLFW_KEY_S && action == GLFW_PRESS){ // For saving the field
+        shouldWait = true;
+        if(savedField != NULL) {
+            FreeField(savedField, FIELD_SIZE);
+        }
+        savedField = CreateField(FIELD_SIZE);
+        for(int i = 0; i < FIELD_SIZE; i++) {
+            for(int j = 0; j < FIELD_SIZE; j++) {
+                savedField[i][j] = field[i][j];
+            }
+        }
+    }
+    if(key == GLFW_KEY_P && action == GLFW_PRESS){ // For loading the saved field
+        if(savedField != NULL) {
+            shouldWait = true;
+            FreeField(field, FIELD_SIZE);
+            field = CreateField(FIELD_SIZE);
+            for(int i = 0; i < FIELD_SIZE; i++) {
+                for(int j = 0; j < FIELD_SIZE; j++) {
+                    field[i][j] = savedField[i][j];
+                }
+            }
+        }
+    }
 }
+
+short lastCellI = -1;
+short lastCellJ = -1;
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
@@ -121,10 +149,15 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         if(xpos > startX && xpos < WIDTH - startX && ypos > startY && ypos < HEIGHT - startY) {
             unsigned short i = (ypos - startY) / cellSize;
             unsigned short j = (xpos - startX) / cellSize;
-            field[i][j] = !field[i][j]; //change cell status
+            if(lastCellI != i || lastCellJ != j) {
+                field[i][j] = !field[i][j]; //change cell status
+                lastCellI = i;
+                lastCellJ = j;
+            }
         }
     }
 }
+
 
 int main(void) {
 
@@ -141,7 +174,6 @@ int main(void) {
         return -1;
     }
 
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
     setWindowIcon(window, "src/icon.png");
     glfwMakeContextCurrent(window);
 
@@ -171,7 +203,14 @@ int main(void) {
         drawGrid();
         double currentTime = glfwGetTime();
 
-        glfwSetKeyCallback(window, key_space);
+        if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
+            lastCellI = -1;
+            lastCellJ = -1;
+        }
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            mouse_button_callback(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
+        }
+
         fillField(field, FIELD_SIZE);
         
         if (!shouldWait && currentTime - lastStepTime >= stepDelay) {
@@ -180,12 +219,15 @@ int main(void) {
             lastStepTime = currentTime;
         }
 
+        glfwSetKeyCallback(window, key_pressed);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     FreeField(field, FIELD_SIZE);
     FreeField(newField, FIELD_SIZE);
+    FreeField(savedField, FIELD_SIZE);
 
     glfwTerminate();
     return 0;
