@@ -1,13 +1,16 @@
 #include "include/GLFW/glfw3.h"
 #include "include/logic.h"
+#include "include/json.h"
+#include <stdlib.h>
 
 #define WIDTH 700
 #define HEIGHT 700
-#define FIELD_SIZE 40
 
 static bool** CreateField(const unsigned short size);
 static void NextStep(bool** current, bool** next, const unsigned short size);
-void FreeField(bool** field, unsigned short size);
+static char* ReadJson(const char* filename);
+static returnPair ParseJson(char* data);
+static void FreeField(bool** field, unsigned short size);
 
 void error_callback(int error, const char* description) {
     fprintf(stderr, "Error: %s\n", description);
@@ -22,6 +25,10 @@ static void setWindowIcon(GLFWwindow* window, const char* iconPath) {
     }
 }
 
+//global variables declaration
+int fieldSize = 30;
+float stepDelay = 0.05;
+
 bool **field = NULL;
 bool **newField = NULL;
 bool **savedField = NULL;
@@ -29,6 +36,12 @@ bool **savedField = NULL;
 float startX, startY;
 float gridWidth, gridHeight;
 float cellSize;
+
+double lastStepTime = 0.0;
+bool shouldWait = true;
+
+short lastCellI = -1;
+short lastCellJ = -1;
 
 void drawRectangle(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4) {
     glBegin(GL_QUADS);
@@ -50,7 +63,7 @@ void calculateGridDimensions(int windowWidth, int windowHeight) {
     startY = (windowHeight - gridSide) / 2;
     gridWidth = gridSide;
     gridHeight = gridSide;
-    cellSize = gridWidth / FIELD_SIZE;
+    cellSize = gridWidth / fieldSize;
 }
 
 void drawGrid() {
@@ -59,13 +72,13 @@ void drawGrid() {
     
     glBegin(GL_LINES);
     
-    for (unsigned short i = 0; i <= FIELD_SIZE; i++) {
+    for (unsigned short i = 0; i <= fieldSize; i++) {
         float x = startX + i * cellSize;
         glVertex2f(x, startY);
         glVertex2f(x, startY + gridHeight);
     }
     
-    for (unsigned short j = 0; j <= FIELD_SIZE; j++) {
+    for (unsigned short j = 0; j <= fieldSize; j++) {
         float y = startY + j * cellSize;
         glVertex2f(startX, y);
         glVertex2f(startX + gridWidth, y);
@@ -95,18 +108,14 @@ static void swapFields(bool ***current, bool ***next, unsigned short size) {
     *next = temp;
 }
 
-double lastStepTime = 0.0;
-float stepDelay = 0.05;
-bool shouldWait = true;
-
 static void key_pressed(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
         shouldWait = !shouldWait;
     }
     if(key == GLFW_KEY_C && action == GLFW_PRESS){ // For clearing the field
         shouldWait = true;
-        for(int i = 0; i < FIELD_SIZE; i++) {
-            for(int j = 0; j < FIELD_SIZE; j++) {
+        for(int i = 0; i < fieldSize; i++) {
+            for(int j = 0; j < fieldSize; j++) {
                 field[i][j] = 0;
             }
         }
@@ -114,11 +123,11 @@ static void key_pressed(GLFWwindow* window, int key, int scancode, int action, i
     if(key == GLFW_KEY_S && action == GLFW_PRESS){ // For saving the field
         shouldWait = true;
         if(savedField != NULL) {
-            FreeField(savedField, FIELD_SIZE);
+            FreeField(savedField, fieldSize);
         }
-        savedField = CreateField(FIELD_SIZE);
-        for(int i = 0; i < FIELD_SIZE; i++) {
-            for(int j = 0; j < FIELD_SIZE; j++) {
+        savedField = CreateField(fieldSize);
+        for(int i = 0; i < fieldSize; i++) {
+            for(int j = 0; j < fieldSize; j++) {
                 savedField[i][j] = field[i][j];
             }
         }
@@ -126,19 +135,16 @@ static void key_pressed(GLFWwindow* window, int key, int scancode, int action, i
     if(key == GLFW_KEY_P && action == GLFW_PRESS){ // For loading the saved field
         if(savedField != NULL) {
             shouldWait = true;
-            FreeField(field, FIELD_SIZE);
-            field = CreateField(FIELD_SIZE);
-            for(int i = 0; i < FIELD_SIZE; i++) {
-                for(int j = 0; j < FIELD_SIZE; j++) {
+            FreeField(field, fieldSize);
+            field = CreateField(fieldSize);
+            for(int i = 0; i < fieldSize; i++) {
+                for(int j = 0; j < fieldSize; j++) {
                     field[i][j] = savedField[i][j];
                 }
             }
         }
     }
 }
-
-short lastCellI = -1;
-short lastCellJ = -1;
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
@@ -158,14 +164,26 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
 }
 
-
 int main(void) {
-
+    char* rawJson = ReadJson("configs/setup.json");
+    if (rawJson != NULL){
+        returnPair Pair = ParseJson(rawJson);
+        for (int i = 0; i < Pair.size; i++){
+            if (strcmp(Pair.data[i].key,"fieldSize") == 0) {
+                fieldSize = atoi(Pair.data[i].value);
+            }
+            else if (strcmp(Pair.data[i].key,"stepDelay") == 0) {
+                stepDelay = (float)atof(Pair.data[i].value);
+            }
+        }
+        free(Pair.data);
+    }
+    free(rawJson);
+    
     GLFWwindow* window;
 
     glfwSetErrorCallback(error_callback);
-    if (!glfwInit())
-        return -1;
+    if (!glfwInit()) return -1;
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     window = glfwCreateWindow(WIDTH, HEIGHT, "Game of Life", NULL, NULL);
@@ -184,8 +202,8 @@ int main(void) {
     glOrtho(0, WIDTH, 0, HEIGHT, -1, 1);
     glMatrixMode(GL_MODELVIEW);
 
-    field = CreateField(FIELD_SIZE);
-    newField = CreateField(FIELD_SIZE);
+    field = CreateField(fieldSize);
+    newField = CreateField(fieldSize);
 
     // Initial pattern (Glider)
     field[1][2] = 1;
@@ -211,11 +229,11 @@ int main(void) {
             mouse_button_callback(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
         }
 
-        fillField(field, FIELD_SIZE);
+        fillField(field, fieldSize);
         
         if (!shouldWait && currentTime - lastStepTime >= stepDelay) {
-            NextStep(field, newField,FIELD_SIZE);
-            swapFields(&field, &newField, FIELD_SIZE);
+            NextStep(field, newField,fieldSize);
+            swapFields(&field, &newField, fieldSize);
             lastStepTime = currentTime;
         }
 
@@ -225,9 +243,9 @@ int main(void) {
         glfwPollEvents();
     }
 
-    FreeField(field, FIELD_SIZE);
-    FreeField(newField, FIELD_SIZE);
-    FreeField(savedField, FIELD_SIZE);
+    FreeField(field, fieldSize);
+    FreeField(newField, fieldSize);
+    FreeField(savedField, fieldSize);
 
     glfwTerminate();
     return 0;

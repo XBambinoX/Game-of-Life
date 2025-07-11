@@ -55,7 +55,7 @@ static void NextStep(bool** current, bool** next, const unsigned short size ) {
     }
 }
 
-void FreeField(bool** field, const unsigned short size) {
+static void FreeField(bool** field, const unsigned short size) {
     for (unsigned short i = 0; i < size; i++) {
         free(field[i]);
     }
