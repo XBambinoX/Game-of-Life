@@ -1,18 +1,17 @@
 #include "include/GLFW/glfw3.h"
 #include "include/logic.h"
 #include "include/json.h"
-#include <stdlib.h>
 
-#define WIDTH 700
-#define HEIGHT 700
+#define SIZE 700
+#define MAX_KEYS 1024
 
-static bool** CreateField(const unsigned short size);
-static void NextStep(bool** current, bool** next, const unsigned short size);
-static char* ReadJson(const char* filename);
-static returnPair ParseJson(char* data);
-static void FreeField(bool** field, unsigned short size);
+bool** CreateField(const unsigned short size);
+void NextStep(bool** current, bool** next, const unsigned short size);
+char* ReadJson(const char* filename);
+returnPair ParseJson(char* data);
+void FreeField(bool** field, unsigned short size);
 
-void error_callback(int error, const char* description) {
+static void error_callback(int error, const char* description) {
     fprintf(stderr, "Error: %s\n", description);
 }
 
@@ -26,15 +25,16 @@ static void setWindowIcon(GLFWwindow* window, const char* iconPath) {
 }
 
 //global variables declaration
-int fieldSize = 30;
-float stepDelay = 0.05;
+unsigned short fieldSize = 40; // Default field size
+float stepDelay = 0.05f; // Default step delay in seconds
 
 bool **field = NULL;
 bool **newField = NULL;
 bool **savedField = NULL;
 
-float startX, startY;
-float gridWidth, gridHeight;
+const float margin = 0.05f;
+const float gridSize = SIZE * (1 - 2 * margin);
+const float startXY = (SIZE - gridSize) / 2;
 float cellSize;
 
 double lastStepTime = 0.0;
@@ -43,7 +43,9 @@ bool shouldWait = true;
 short lastCellI = -1;
 short lastCellJ = -1;
 
-void drawRectangle(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4) {
+bool keyStates[MAX_KEYS] = {false};
+
+static void drawRectangle(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4) {
     glBegin(GL_QUADS);
     glColor3f(0.7f, 0.7f, 0.7f);
     glVertex2f(x1, y1);
@@ -53,37 +55,20 @@ void drawRectangle(float x1, float y1, float x2, float y2, float x3, float y3, f
     glEnd();
 }
 
-void calculateGridDimensions(int windowWidth, int windowHeight) {
-    float margin = 0.05f; 
-    float availableWidth = windowWidth * (1 - 2 * margin);
-    float availableHeight = windowHeight * (1 - 2 * margin);
-    float gridSide = (availableWidth < availableHeight) ? availableWidth : availableHeight;
-    
-    startX = (windowWidth - gridSide) / 2;
-    startY = (windowHeight - gridSide) / 2;
-    gridWidth = gridSide;
-    gridHeight = gridSide;
-    cellSize = gridWidth / fieldSize;
-}
-
-void drawGrid() {
+static void drawGrid() {
     glColor3f(0.7f, 0.7f, 0.7f);
     glLineWidth(1.0f);
     
     glBegin(GL_LINES);
     
     for (unsigned short i = 0; i <= fieldSize; i++) {
-        float x = startX + i * cellSize;
-        glVertex2f(x, startY);
-        glVertex2f(x, startY + gridHeight);
+        float x = startXY + i * cellSize;
+        float y = x;
+        glVertex2f(x, startXY);
+        glVertex2f(x, startXY + gridSize);
+        glVertex2f(startXY, y);
+        glVertex2f(startXY + gridSize, y);
     }
-    
-    for (unsigned short j = 0; j <= fieldSize; j++) {
-        float y = startY + j * cellSize;
-        glVertex2f(startX, y);
-        glVertex2f(startX + gridWidth, y);
-    }
-
     glEnd();
 }
 
@@ -91,8 +76,8 @@ static void fillField(bool** field, unsigned short size) {
     for(unsigned short i = 0; i < size; i++) {
         for (unsigned short j = 0; j < size; j++) {
             if (field[i][j]) {
-                float x = startX + j * cellSize;
-                float y = startY + (size - 1 - i) * cellSize;
+                float x = startXY + j * cellSize;
+                float y = startXY + (size - 1 - i) * cellSize;
                 drawRectangle(x, y, 
                             x + cellSize, y, 
                             x + cellSize, y + cellSize, 
@@ -108,54 +93,170 @@ static void swapFields(bool ***current, bool ***next, unsigned short size) {
     *next = temp;
 }
 
-static void key_pressed(GLFWwindow* window, int key, int scancode, int action, int mods) {
+static void writeFieldToFile(bool** field, unsigned short size, const char* filename) {
+    FILE *file = fopen(filename, "wb");
+    for (unsigned short row = 0; row < size; row++) {
+        for (unsigned short col = 0; col < size; col++) {
+            if (field[row][col]) {
+                unsigned short coords[2] = {row, col};
+                fwrite(coords, sizeof(unsigned short), 2, file);
+            }
+        }
+    }
+    fclose(file);
+}
+
+static void readFieldFromFile(bool** field, unsigned short size, const char* filename) {
+    FILE *file = fopen(filename, "rb");
+    unsigned short coords[2];
+    while (fread(coords, sizeof(unsigned short), 2, file) == 2) {
+        field[coords[0]][coords[1]] = true;
+    }
+    fclose(file);
+}
+
+typedef struct {
+    int key1;
+    int key2;
+    const char* filename;
+} keyCombo;
+
+keyCombo combosW[] = {                          // Combos for writing files
+    {GLFW_KEY_W, GLFW_KEY_0, "file_w.bin"},
+    {GLFW_KEY_W, GLFW_KEY_1, "file_w1.bin"},
+    {GLFW_KEY_W, GLFW_KEY_2, "file_w2.bin"},
+    {GLFW_KEY_W, GLFW_KEY_3, "file_w3.bin"},
+    {GLFW_KEY_W, GLFW_KEY_4, "file_w4.bin"},
+    {GLFW_KEY_W, GLFW_KEY_5, "file_w5.bin"},
+    {GLFW_KEY_W, GLFW_KEY_6, "file_w6.bin"},
+    {GLFW_KEY_W, GLFW_KEY_7, "file_w7.bin"},
+    {GLFW_KEY_W, GLFW_KEY_8, "file_w8.bin"},
+    {GLFW_KEY_W, GLFW_KEY_9, "file_w9.bin"},
+};
+
+keyCombo combosR[] = {                          // Combos for reading files
+    {GLFW_KEY_R, GLFW_KEY_0, "file_w.bin"},
+    {GLFW_KEY_R, GLFW_KEY_1, "file_w1.bin"},
+    {GLFW_KEY_R, GLFW_KEY_2, "file_w2.bin"},
+    {GLFW_KEY_R, GLFW_KEY_3, "file_w3.bin"},
+    {GLFW_KEY_R, GLFW_KEY_4, "file_w4.bin"},
+    {GLFW_KEY_R, GLFW_KEY_5, "file_w5.bin"},
+    {GLFW_KEY_R, GLFW_KEY_6, "file_w6.bin"},
+    {GLFW_KEY_R, GLFW_KEY_7, "file_w7.bin"},
+    {GLFW_KEY_R, GLFW_KEY_8, "file_w8.bin"},
+    {GLFW_KEY_R, GLFW_KEY_9, "file_w9.bin"},
+};
+
+keyCombo combosD[] = {                          // Combos for deleting files
+    {GLFW_KEY_D, GLFW_KEY_0, "file_w.bin"},
+    {GLFW_KEY_D, GLFW_KEY_1, "file_w1.bin"},
+    {GLFW_KEY_D, GLFW_KEY_2, "file_w2.bin"},
+    {GLFW_KEY_D, GLFW_KEY_3, "file_w3.bin"},
+    {GLFW_KEY_D, GLFW_KEY_4, "file_w4.bin"},
+    {GLFW_KEY_D, GLFW_KEY_5, "file_w5.bin"},
+    {GLFW_KEY_D, GLFW_KEY_6, "file_w6.bin"},
+    {GLFW_KEY_D, GLFW_KEY_7, "file_w7.bin"},
+    {GLFW_KEY_D, GLFW_KEY_8, "file_w8.bin"},
+    {GLFW_KEY_D, GLFW_KEY_9, "file_w9.bin"},
+};
+
+#define NUM_COMBOS (sizeof(combosW) / sizeof(combosW[0]))
+bool comboTriggered[NUM_COMBOS] = {false};
+
+static void KeyPressed(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
         shouldWait = !shouldWait;
     }
-    if(key == GLFW_KEY_C && action == GLFW_PRESS){ // For clearing the field
+    
+    if (key == GLFW_KEY_C && action == GLFW_PRESS){ // For clearing the field
         shouldWait = true;
-        for(int i = 0; i < fieldSize; i++) {
-            for(int j = 0; j < fieldSize; j++) {
+        for (unsigned short i = 0; i < fieldSize; i++) {
+            for (unsigned short j = 0; j < fieldSize; j++) {
                 field[i][j] = 0;
             }
         }
     }
-    if(key == GLFW_KEY_S && action == GLFW_PRESS){ // For saving the field
+
+    if (key == GLFW_KEY_S && action == GLFW_PRESS){ // For saving the field
         shouldWait = true;
-        if(savedField != NULL) {
+        if (savedField != NULL) {
             FreeField(savedField, fieldSize);
         }
         savedField = CreateField(fieldSize);
-        for(int i = 0; i < fieldSize; i++) {
-            for(int j = 0; j < fieldSize; j++) {
+        for (unsigned short i = 0; i < fieldSize; i++) {
+            for (unsigned short j = 0; j < fieldSize; j++) {
                 savedField[i][j] = field[i][j];
             }
         }
     }
-    if(key == GLFW_KEY_P && action == GLFW_PRESS){ // For loading the saved field
-        if(savedField != NULL) {
+
+    if (key == GLFW_KEY_P && action == GLFW_PRESS){ // For loading the saved field
+        if (savedField != NULL) {
             shouldWait = true;
             FreeField(field, fieldSize);
             field = CreateField(fieldSize);
-            for(int i = 0; i < fieldSize; i++) {
-                for(int j = 0; j < fieldSize; j++) {
+            for (unsigned short i = 0; i < fieldSize; i++) {
+                for (unsigned short j = 0; j < fieldSize; j++) {
                     field[i][j] = savedField[i][j];
                 }
             }
         }
     }
+
+    if (key >= 0 && key < MAX_KEYS) { // Update key states
+        if (action == GLFW_PRESS) {
+            keyStates[key] = true;
+        }
+        else if (action == GLFW_RELEASE) {
+            keyStates[key] = false;
+        }
+    }  
+
+    for (int i = 0; i < NUM_COMBOS; i++) { // Check for write combos
+        bool bothPressed = keyStates[combosW[i].key1] && keyStates[combosW[i].key2];
+        if (bothPressed && !comboTriggered[i]) {
+            writeFieldToFile(field, fieldSize, combosW[i].filename);
+            comboTriggered[i] = true;
+        }
+        else if (!bothPressed) {
+            comboTriggered[i] = false;
+        }
+    }
+
+    for (int i = 0; i < NUM_COMBOS; i++) { // Check for read combos
+        bool bothPressed = keyStates[combosR[i].key1] && keyStates[combosR[i].key2];
+        if (bothPressed && !comboTriggered[i]) {
+            shouldWait = true;
+            FreeField(field, fieldSize);
+            field = CreateField(fieldSize);
+            readFieldFromFile(field, fieldSize, combosR[i].filename);
+            comboTriggered[i] = true;
+        }
+        else if (!bothPressed) {
+            comboTriggered[i] = false;
+        }
+    }
+
+    for (int i = 0; i < NUM_COMBOS; i++) { // Check for delete combos
+        bool bothPressed = keyStates[combosD[i].key1] && keyStates[combosD[i].key2];
+        if (bothPressed && !comboTriggered[i]) {
+            remove(combosD[i].filename);
+        }
+        else if (!bothPressed) {
+            comboTriggered[i] = false;
+        }
+    }
 }
 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
-        calculateGridDimensions(WIDTH, HEIGHT);
         
-        if(xpos > startX && xpos < WIDTH - startX && ypos > startY && ypos < HEIGHT - startY) {
-            unsigned short i = (ypos - startY) / cellSize;
-            unsigned short j = (xpos - startX) / cellSize;
-            if(lastCellI != i || lastCellJ != j) {
+        if (xpos > startXY && xpos < SIZE - startXY && ypos > startXY && ypos < SIZE - startXY) {
+            unsigned short i = (ypos - startXY) / cellSize;
+            unsigned short j = (xpos - startXY) / cellSize;
+            if (lastCellI != i || lastCellJ != j) {
                 field[i][j] = !field[i][j]; //change cell status
                 lastCellI = i;
                 lastCellJ = j;
@@ -165,6 +266,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 }
 
 int main(void) {
+    cellSize = gridSize / fieldSize;
+
     char* rawJson = ReadJson("configs/setup.json");
     if (rawJson != NULL){
         returnPair Pair = ParseJson(rawJson);
@@ -186,7 +289,7 @@ int main(void) {
     if (!glfwInit()) return -1;
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Game of Life", NULL, NULL);
+    window = glfwCreateWindow(SIZE, SIZE, "Game of Life", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -195,11 +298,9 @@ int main(void) {
     setWindowIcon(window, "src/icon.png");
     glfwMakeContextCurrent(window);
 
-    calculateGridDimensions(WIDTH, HEIGHT);
-
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, WIDTH, 0, HEIGHT, -1, 1);
+    glOrtho(0, SIZE, 0, SIZE, -1, 1);
     glMatrixMode(GL_MODELVIEW);
 
     field = CreateField(fieldSize);
@@ -213,7 +314,6 @@ int main(void) {
     field[3][3] = 1;
 
     while (!glfwWindowShouldClose(window)) {
-        calculateGridDimensions(WIDTH, HEIGHT);
 
         glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -226,7 +326,7 @@ int main(void) {
             lastCellJ = -1;
         }
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            mouse_button_callback(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
+            mouseButtonCallback(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
         }
 
         fillField(field, fieldSize);
@@ -237,7 +337,7 @@ int main(void) {
             lastStepTime = currentTime;
         }
 
-        glfwSetKeyCallback(window, key_pressed);
+        glfwSetKeyCallback(window, KeyPressed);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

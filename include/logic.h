@@ -4,18 +4,18 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-static bool** CreateField(const unsigned short size) {
+bool** CreateField(const unsigned short size) {
     bool** field = (bool**)malloc(size * sizeof(bool*));
-    for (unsigned short i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
         field[i] = (bool*)malloc(size * sizeof(bool));
-        for (unsigned short j = 0; j < size; j++) {
+        for (int j = 0; j < size; j++) {
             field[i][j] = 0;
         }
     }
     return field;
 }
 
-static void NextStep(bool** current, bool** next, const unsigned short size ) {
+void NextStep(bool** current, bool** next, const unsigned short size ) {
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
             if (current[i][j] == 0) {
@@ -55,8 +55,8 @@ static void NextStep(bool** current, bool** next, const unsigned short size ) {
     }
 }
 
-static void FreeField(bool** field, const unsigned short size) {
-    for (unsigned short i = 0; i < size; i++) {
+void FreeField(bool** field, const unsigned short size) {
+    for (int i = 0; i < size; i++) {
         free(field[i]);
     }
     free(field);

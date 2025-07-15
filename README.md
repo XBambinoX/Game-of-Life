@@ -7,3 +7,6 @@ SPACE - pause/stop
 C - Clear field
 S - Save field
 P - Paste field
+W + 1/2/3/4/5/6/7/8/9/0 - write field to file
+R + 1/2/3/4/5/6/7/8/9/0 - read field from file
+D + 1/2/3/4/5/6/7/8/9/0 - delete file

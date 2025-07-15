@@ -12,7 +12,7 @@ typedef struct returnPair{
     int size;
 } returnPair;
 
-static char* ReadJson(const char* filename) {
+char* ReadJson(const char* filename) {
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
         return NULL;
@@ -34,7 +34,7 @@ static char* ReadJson(const char* filename) {
     return str;
 }
 
-static returnPair ParseJson(char* data){
+returnPair ParseJson(char* data){
     int size = 0;
     char* str = data;
 
