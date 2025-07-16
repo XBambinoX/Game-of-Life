@@ -215,6 +215,7 @@ static void KeyPressed(GLFWwindow* window, int key, int scancode, int action, in
     for (int i = 0; i < NUM_COMBOS; i++) { // Check for write combos
         bool bothPressed = keyStates[combosW[i].key1] && keyStates[combosW[i].key2];
         if (bothPressed && !comboTriggered[i]) {
+            shouldWait = true;
             writeFieldToFile(field, fieldSize, combosW[i].filename);
             comboTriggered[i] = true;
         }
@@ -266,8 +267,6 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int 
 }
 
 int main(void) {
-    cellSize = gridSize / fieldSize;
-
     char* rawJson = ReadJson("configs/setup.json");
     if (rawJson != NULL){
         returnPair Pair = ParseJson(rawJson);
@@ -303,6 +302,7 @@ int main(void) {
     glOrtho(0, SIZE, 0, SIZE, -1, 1);
     glMatrixMode(GL_MODELVIEW);
 
+    cellSize = gridSize / fieldSize;
     field = CreateField(fieldSize);
     newField = CreateField(fieldSize);
 
@@ -314,6 +314,7 @@ int main(void) {
     field[3][3] = 1;
 
     while (!glfwWindowShouldClose(window)) {
+        cellSize = gridSize / fieldSize;
 
         glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
